@@ -7,3 +7,8 @@ socialflow
 -----------
 
 A modified and extended version of flowing particles to represent humans using glowing light, this project also allows users to have a basic interaction with the screen and upload user generated snapshots to a Facebook album
+
+aura
+-----
+
+A visualization of auras around people, this project also allows users to have a basic interaction with the screen and upload user generated snapshots to a Facebook album

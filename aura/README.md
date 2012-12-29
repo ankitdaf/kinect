@@ -1,11 +1,11 @@
-LUX Installation - Social Kinect
+LUX Installation - Aura
 =================================
 
-A Kinect based light visualization of people for interactive fun installations
+A Kinect based light visualization of the aura of people for interactive fun installations
 
 What it can do
 --------------
-This application visualizes people as glowing light particles and allows them to post images of them in action on Facebook
+This application visualizes auras around people and allows them to post images of them in action on Facebook/
 
 What you need to do
 --------------------

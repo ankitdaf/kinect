@@ -1,4 +1,4 @@
-// Kinect Flow-Example by Amnon Owed (15/09/12)
+// Kinect Body Outline Example 
 // Modified by Ankit Daftery 29/12/12
 
 // import libraries
@@ -9,6 +9,8 @@ import javax.media.opengl.*;
 import java.awt.Polygon;  // this is a regular java import so we can use and extend the polygon class (see PolygonBlob)
 import java.awt.Graphics2D; 
 import controlP5.*; // For visual controls
+import toxi.geom.*; // toxiclibs shapes and vectors
+import toxi.processing.*; // toxiclibs display
 
 // The Image processing libraries
 import SimpleOpenNI.*; // kinect
@@ -32,6 +34,7 @@ GL gl;
 SimpleOpenNI kinect;  // declare SimpleOpenNI object
 BlobDetection theBlobDetection;  // declare BlobDetection object
 PolygonBlob poly = new PolygonBlob();  // declare custom PolygonBlob object (see class for more info)
+ToxiclibsSupport gfx; // ToxiclibsSupport for displaying polygons
 
 // Global variables
 PImage dispImg; // For manipulation of the screen for the glowy effect
@@ -46,6 +49,10 @@ PImage bgImg; // Background Image
 Boolean canUpload=true;   // To keep track of Posting to Facebook so we don't flood 
 Particle[] flow = new Particle[3500];  // an array to hold 3500 Particle objects to begin with
 float globalX, globalY;  // global variables to influence the movement of all particles
+PGraphics bufimg;
+int[] blobpixels; // For copying the processed pixels into the blob image
+color[] colorPalette;
+
 
 String[] palettes = {
   "-1117720,-13683658,-8410437,-9998215,-1849945,-5517090,-4250587,-14178341,-5804972,-3498634", 
@@ -54,10 +61,11 @@ String[] palettes = {
 };          // three color palettes courtest Amnon Owed
 
 
+int[] user1;
+
 void setup() {
-  size(1600, 900, P2D);  // setup size and graphics mode, I am using P2D
-  screenBuf = new int[1600*900];  // A pixel array to be used later for ShiftBlur
-  cp5 = new ControlP5(this);  // Visual control panel onscreen
+  size(1600, 900, P2D);  // setup size and graphics mode, I am using P3D
+  cp5 = new ControlP5(this);
   PImage[] imgs = {loadImage("facebook.png"),loadImage("facebook.png"),loadImage("facebook.png")};  // Images for the button in different states
   cp5.addButton("Facebook")   // adding the facebook share button
     .setValue(128)
@@ -70,92 +78,44 @@ void setup() {
     println("No scene image");
     exit();
   }
-  else {  
+  else {
     setupKinect(kinect);  // Setup parameters for the kinect
     reScale = (float) width / kinectWidth;  // calculate the reScale value
     blobs = createImage(kinectWidth/3, kinectHeight/3, RGB);  // create a smaller blob image for speed and efficiency
     theBlobDetection = new BlobDetection(blobs.width, blobs.height);  // initialize blob detection object to the blob image dimensions
     theBlobDetection.setThreshold(0.3f);  // A threshold of 0.2 or 0.3 is best, I don't know why
     dispImg = createImage(1600,900,RGB);
-    bgImg = loadImage("bg.jpg");
+    gfx = new ToxiclibsSupport(this); // initialize ToxiclibsSupport object
   }
 }
 
 void draw() {
-  setupgl();  // Setup the graphics layer
   blendMode(REPLACE); // Replace the previous image, we have new things to draw
   image(bgImg,0,0); // Giving our effect a background to match
   kinect.update();  // Get fresh information from the Kinect
   cam = kinect.sceneImage().get();  // Get information from the scene
-  blobs.copy(cam, 0, 0, cam.width, cam.height, 0, 0, blobs.width, blobs.height);  // copy the image into the smaller blob image for faster processing
-  blobs.filter(BLUR);  // blur the blob image
-  theBlobDetection.computeBlobs(blobs.pixels);  // detect the blobs
-  poly.reset();  // clear the polygon (original functionality)
-  poly.createPolygon();  // create the polygon from the blobs (custom functionality, see class)
-  if (kinect.getNumberOfUsers() < nou_old) nou_old = kinect.getNumberOfUsers(); // Generally doesn't happen, but just in case. We don't want ghosts of users past ;)
-  if(nou_old>0) // We DO have some user staring at us
-  {
-  int n = 3500*nou_old; // 3500 particles for each user. Experiment and set the number according to your taste and requirement
-  flow = new Particle[n];
-  setupFlowfield(); // Initialize the particles for the flow
-  drawFlowfield();  // Draw the flow particles
-  }
-}
+  background(0);  
+  IntVector userList = new IntVector();
+  int nou = kinect.getNumberOfUsers();
+  if (nou < nou_old) nou_old = nou;
+  if (nou_old>0) {
+    {
+      user1 = kinect.getUsersPixels(SimpleOpenNI.USERS_ALL);    // find out which pixels have users in them
+      blobs.pixels = user1 ;    // clean up blobs.pixels
+      for (int   i = 0; i < user1.length; i++) {    // populate the pixels array from the sketch's current contents
+        if (user1[i] != 0) {    // if the current pixel is on a user
+          blobs.pixels[i] = 255;  // make it white and distinguishable 
+        }
+        else
+        {
+          blobs.pixels[i] = 0;
+        }
+      }
 
-
-// A function to easily setup features required from the Kinect OpenNI interface
-
-void setupKinect(SimpleOpenNI kinect)
-{
-  kinect.setMirror(true);  // mirror the image to make the display more intuitive
-  kinect.enableUser(SimpleOpenNI.SKEL_PROFILE_NONE);  // We need to enable user tracking but do not use skeleton joints here
-  kinect.enableGesture(); // Enable Gesture tracking to be used to find the hand the first time
-  kinect.enableHands();   // Enable hand tracking to be used for "Share on Facebook" feature
-  kinect.addGesture("RaiseHand");  // Tell the kinect that we would like it to report a Raised Hand gesture
-}
-
-// Create and initialize the particles that we need to represent users
-
-void setupFlowfield() { 
-  strokeWeight(2.5);  // set stroke weight (for particle display) to 2.5, set it here to avoid multi-thousand calls
-  for(int i=0; i<flow.length; i++) {
-    flow[i] = new Particle(i/10000.0);  // initialize all particles in the flow
-  }
-  setRandomColors(1);  // set all colors randomly now from the color palette
-}
-
-// Update each particle
-
-void drawFlowfield() {
-  scale(reScale);
-  globalX = noise(frameCount * 0.01) * width/2 + width/4;  // set global noise variables that influence the particle flow's movement
-  globalY = noise(frameCount * 0.005 + 5) * height;
-  blendMode(REPLACE);
-
-  for (Particle p : flow) {
-    p.updateAndDisplay();  // update and display all particles in the flow
-  }
-  blendMode(ADD);   // Setting blendmode to add since we need the additive effect for the glow
-  scale(1/reScale);   // Different images we have used have different sizes, so we need to rescale 
-  dispImg.loadPixels(); // Initialize the pixels of dispImg to avoid getting a nullpointerexception
-  loadPixels(); // Load what is on the screen
-  shiftBlur3(pixels,screenBuf); // Use the shiftblur method
-  shiftBlur3(screenBuf,dispImg.pixels); // Use the shiftBlur method again for good measure
-  dispImg.updatePixels();   // Update the pixels to the dispImg
-  image(dispImg,0,0); // Show the image, and voila
-}
-
-// sets the colors every nth frame (unchanged from Amnon Owed's script )
-
-void setRandomColors(int nthFrame) {
-  if (frameCount % nthFrame == 0) {
-    String[] paletteStrings = split(palettes[int(random(palettes.length))], ",");  // turn a palette into a series of strings
-    color[] colorPalette = new color[paletteStrings.length];  // turn strings into colors
-    for (int i=0; i<paletteStrings.length; i++) {
-      colorPalette[i] = int(paletteStrings[i]);
-    }
-    for (int i=0; i<flow.length; i++) {
-      flow[i].col = colorPalette[int(random(0, colorPalette.length))];  // set all particle colors randomly to color from palette (excluding first aka background color)
+      theBlobDetection.computeBlobs(blobs.pixels);
+      poly = new PolygonBlob();         // initialize a new polygon
+      poly.createPolygon();         // create the polygon from the blobs (custom functionality, see class)
+      polyglow(gfx, poly);    // Shine, baby !
     }
   }
 }
@@ -170,6 +130,37 @@ void setupgl()
   gl.glEnable(GL.GL_BLEND);  // Turn on the blend mode
   gl.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE);  // Define the blend mode
   gl.glClear(GL.GL_DEPTH_BUFFER_BIT);
+}
+
+// A function to easily setup features required from the Kinect OpenNI interface
+
+void setupKinect(SimpleOpenNI kinect)
+{
+  kinect.setMirror(true);  // mirror the image to make the display more intuitive
+  kinect.enableUser(SimpleOpenNI.SKEL_PROFILE_NONE);  // We need to enable user tracking but do not use skeleton joints here
+  kinect.enableGesture(); // Enable Gesture tracking to be used to find the hand the first time
+  kinect.enableHands();   // Enable hand tracking to be used for "Share on Facebook" feature
+  kinect.addGesture("RaiseHand");  // Tell the kinect that we would like it to report a Raised Hand gesture
+}
+
+
+// An experiment to make a body "glow"
+void polyglow(ToxiclibsSupport gfx, PolygonBlob poly)
+{
+  noFill();
+  tint(255, 255);
+  strokeWeight(10);
+  stroke(250, 250, 52);
+  scale(reScale);
+  gfx.polygon2D(poly);
+  blendMode(ADD);
+  dispimg = get();
+  scale(1/reScale);
+  dispimg.resize(1600/4, 0);
+  dispimg.filter(BLUR, 2);
+  dispimg.resize(1600, 0);
+  tint(255, 180);
+  image(dispimg,0,0);
 }
 
 // SimpleOpenNI callback method when the Kinect "loses" a user
@@ -221,7 +212,7 @@ if(position.x>kinectWidth*0.8 && position.y>0.75*kinectHeight)
   new Poster(4);
   }
 }
-}
+}oh wait, i'll ju
 
 void onDestroyHands(int handId, float time) {
   kinect.addGesture("RaiseHand");
@@ -263,123 +254,6 @@ void post(Timer tim)
     String feedback = du.GetServerFeedback();
     println("----- " + rc + " -----\n" + feedback + "---------------");
   // A flash of white light, like that at the moment of creation. Of a snapshot.
-void onLostUser(int userId)
-{
-  print("Lost the user ");
-  println(userId);
-  kinect.stopTrackingSkeleton(userId);
-  if (nou_old>0) nou_old -=1;
-  print("Number of users ");
-  println(nou_old);
-}
-
-
-void onExitUser(int userId)
-{
-  print("User exit ");
-  println(userId);
-  kinect.stopTrackingSkeleton(userId);
-  if (nou_old>0) nou_old -= 1;
-  print("Number of users ");
-  println(nou_old);
-}
-
-// user-tracking callbacks!
-void onNewUser(int userId) {
-  print("start pose detection for");
-  println(userId);
-  nou_old += 1;
-  print("Number of users ");
-  println(nou_old);
-  //kinect.requestCalibrationSkeleton(userId,true);
-}
-
-// -----------------------------------------------------------------
-// hand events 5
-void onCreateHands(int handId, PVector position, float time) {
-  kinect.convertRealWorldToProjective(position, position);
-  println("Found hands");//handPositions.add(position);
-}
-
-void onUpdateHands(int handId, PVector position, float time) {
-  //kinect.convertRealWorldToProjective(position, position);
-  PVector p = new PVector();
-  if (position.x>kinectWidth*0.8 && position.y>0.75*kinectHeight) 
-  {
-    if (canUpload)
-    {
-      canUpload = false;
-      println("Clicking");
-      fill(255);
-      rect(0,0,width,height);
-      new Poster(1);
-    }
-  }
-  //handPositions.add(position);
-}
-void onDestroyHands(int handId, float time) {
-  //handPositions.clear();
-  kinect.addGesture("RaiseHand");
-}
-// -----------------------------------------------------------------
-// gesture events 6
-void onRecognizeGesture(String strGesture, PVector idPosition, PVector endPosition)
-{
-  println("Recognized Gesture");
-  kinect.startTrackingHands(endPosition);
-  kinect.removeGesture("RaiseHand");
-}
-
-
-void post(Timer tim)
-{
-  DataUpload du = new DataUpload();
-  boolean bOK = false;
-  // Upload the currently displayed image with a fixed name, and the chosen format
-  // We need a new buffered image without the alpha channel
-    fill(255);
-  rect(0, 0, width, height);
-  BufferedImage imageNoAlpha = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-  loadPixels();
-  imageNoAlpha.setRGB(0, 0, width, height, g.pixels, 0, width);
-  //  BufferedImage dimg = new BufferedImage(width,height,imageNoAlpha.getColorModel().getTransparency());
-  //  Graphics2D g2 = dimg.createGraphics();
-  //  g2.drawImage(imageNoAlpha,0,0,width,height,0,height,width,0,null);
-  //  g2.dispose();
-
-  bOK = du.UploadImage("snapshot.jpeg", imageNoAlpha);
-  if (!bOK)
-    return; // Some problem on Java side. Do nothing
-
-  // Get the answer of the PHP script
-  int rc = du.GetResponseCode();
-  String feedback = du.GetServerFeedback();
-  println("----- " + rc + " -----\n" + feedback + "---------------");
-  fill(255);
-  rect(0, 0, width, height);
-  tim.cancel();
-}
-
-public class Poster {
-  Timer tim;
-
-  public Poster(int seconds) 
-  {
-    tim = new Timer();
-    tim.schedule(new PostTask(), seconds*1000);
-  }
-  class PostTask extends TimerTask {
-
-    public void run() {
-      println("Time's up!");
-      post(tim);
-      //tim.cancel(); //Not necessary because we call System.exit
-      canUpload = true;
-    }
-  }
-}
-
-
     fill(255);
     rect(0,0,width,height);
     tim.cancel(); // Cancel the timer, we are done with it
@@ -404,4 +278,3 @@ public class Poster{
       }
   }
 }
-

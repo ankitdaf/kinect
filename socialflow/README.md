@@ -13,11 +13,12 @@ Connect your Kinect, start your processing Sketch, have the server script and so
 
 Requirements 
 -------------
-Microsoft Kinect
-Processing IDE
-JRE
-ControlP5 Processing library
-SimpleOpenNI library
+
+- Microsoft Kinect
+- Processing IDE
+- JRE
+- ControlP5 Processing library
+- SimpleOpenNI library
 
 Thanks
 ------

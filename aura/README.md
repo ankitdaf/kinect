@@ -9,7 +9,12 @@ This application visualizes auras around people and allows them to post images o
 
 What you need to do
 --------------------
-Connect your Kinect, start your processing Sketch, have the server script and some webspace on your server, and voila !
+
+- Upload the server script to a PHP web server
+- Upload the Facebook PHP SDK ( Get it here : https://github.com/facebook/facebook-php-sdk/tree/master/src )
+- Generate the necessary Facebook Page tokens for permissions to post the site
+- Setup your Kinect and start your processing Sketch (tested working on 2.0b7 , some display issues on 2.0b6) 
+
 
 Requirements 
 -------------
@@ -33,6 +38,6 @@ Many thanks to
 
 License
 -------
-All the technologies used here are free. You are subject to the licensing agreements of those service providers.
+All the technologies used here are free. You are subject to the licensing agreements of those providers.
 
 You are free to generally use this code as long as you give due credit. Me and a lot of other developers before me have spent hours of caffeineited sleepness to make things work. 
